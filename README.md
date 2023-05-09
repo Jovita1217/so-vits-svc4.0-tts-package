@@ -1,7 +1,7 @@
 # so-vits-svc4.0-tts-package
 请至[bilibili@羽毛布団](https://www.bilibili.com/video/BV1H24y187Ko/?spm_id_from=333.337.top_right_bar_window_history.content.click&vd_source=da80b8c27bdce8110c01ddca1da17289)处下载[整合包](https://docs.qq.com/doc/DUWdxS1ZaV29vZnlV)
 
-后下载[edge-tts](https://github.com/rany2/edge-tts)解压至你的整合包文件夹中的\workenv\Lib文件夹（看来行不通，建议跟着我的专栏走）
+后根据[专栏](https://www.bilibili.com/read/cv23363180)安装所需的库
 
 最后下载app.py文件替换原路径里的同名文件
 
