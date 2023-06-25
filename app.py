@@ -60,7 +60,8 @@ def load_model_func(ckpt_name,cluster_name,config_name,enhance):
 
     spk_list = list(spk_dict.keys())
     output_msg = "模型加载成功"
-    return output_msg, gr.Dropdown.update(choices=spk_list, value=spk_choice)
+    #return output_msg, gr.Dropdown.update(choices=spk_list, value=spk_choice)
+    return gr.Dropdown.update(choices=spk_list, value=spk_choice)
 
 def load_options():
     file_list = os.listdir("logs/44k")
@@ -74,6 +75,19 @@ def load_options():
     if not cluster_list:
         cluster_list = ["你没有聚类模型"]
     return choice_ckpt.update(choices = ckpt_list), config_choice.update(choices = os.listdir("configs")), cluster_choice.update(choices = cluster_list)
+
+def choose_same_options(ckpt_name):
+    # 根据选择的模型 自动选择同名配置文件
+    name = ckpt_name[0:len(ckpt_name) - 4] + ".json"
+    if name in os.listdir("configs"):
+        return name
+    p = "(.+?)[_]*[0-9]*.pth"
+    m = re.match(p, ckpt_name)
+    if m and m.group(1):
+        name = m.group(1) + ".json"
+        if name in os.listdir("configs"):
+            return name
+    return "未选择"
 
 def vc_fn(sid, input_audio, vc_transform, auto_f0,cluster_ratio, slice_db, noise_scale,pad_seconds,cl_num,lg_num,lgr_num,F0_mean_pooling,enhancer_adaptive_key):
     global model
@@ -133,7 +147,7 @@ def tts_func(_text,_rate,_voice):
     if ( _voice == "en-US-Michelle" ) : voice = "en-US-MichelleNeural"
     if ( _voice == "en-US-Roger" ) : voice = "en-US-RogerNeural"
     if ( _voice == "en-US-Steffan" ) : voice = "en-US-SteffanNeural"
-    output_file = _text[0:10]+".wav"
+    output_file ="results\\" +  _text[0:10]+".wav"
     # communicate = edge_tts.Communicate(_text, voice)
     # await communicate.save(output_file)
     if _rate>=0:
@@ -154,6 +168,12 @@ def tts_func(_text,_rate,_voice):
 
 def text_clear(text):
     return re.sub(r"[\n\,\(\) ]", "", text)
+
+def vc_fn_try(text2tts,tts_rate,tts_voice):
+    #使用edge-tts把文字转成音频
+    text2tts=text_clear(text2tts)
+    output_file=tts_func(text2tts,tts_rate,tts_voice)
+    return "TTS试听生成",output_file
 
 def vc_fn2(sid, input_audio, vc_transform, auto_f0,cluster_ratio, slice_db, noise_scale,pad_seconds,cl_num,lg_num,lgr_num,text2tts,tts_rate,tts_voice,F0_mean_pooling,enhancer_adaptive_key):
     #使用edge-tts把文字转成音频
@@ -415,57 +435,68 @@ for entry in os.listdir("models_backup"):
 app = gr.Blocks()
 with app:
     gr.Markdown(value="""
-        ###sovits4.0 webui 推理&训练
-                
-        修改自原项目及bilibili@麦哲云和bilibili@羽毛布団
-
-        仅供个人娱乐和非商业用途，禁止用于血腥、暴力、性相关、政治相关内容
-
-        作者：bilibili@闲予1217
-
+        ## sovits4.0 webui 推理&训练  
+        > 修改自原项目，并在其他作者的修改版本上做了进一步修改  
+        > [bilibili@麦哲云](https://space.bilibili.com/437580796) 和 [bilibili@羽毛布団](https://space.bilibili.com/3493141443250876) 的初版整合包，及wedui设计  
+        > [bilibili@闲予1217](https://space.bilibili.com/504685282) 加入TTS功能  
+        > [bilibili@宅宅宅宅宅爷](https://space.bilibili.com/2055141) 对wedui布局进行调整，加入了TTS试听选项
         """)
     with gr.Tabs():
         with gr.TabItem("推理"):
-            choice_ckpt = gr.Dropdown(label="模型选择", choices=ckpt_list, value="no_model")
-            config_choice = gr.Dropdown(label="配置文件", choices=os.listdir("configs"), value="no_config")
-            cluster_choice = gr.Dropdown(label="选择聚类模型", choices=cluster_list, value="no_clu")
-            enhance = gr.Checkbox(label="是否使用NSF_HIFIGAN增强,该选项对部分训练集少的模型有一定的音质增强效果，但是对训练好的模型有反面效果，默认关闭", value=False)
-            refresh = gr.Button("刷新选项")
-            loadckpt = gr.Button("加载模型", variant="primary")
-            
-            sid = gr.Dropdown(label="音色", value="speaker0")
-            model_message = gr.Textbox(label="Output Message")
-            
-            refresh.click(load_options,[],[choice_ckpt,config_choice,cluster_choice])
-            loadckpt.click(load_model_func,[choice_ckpt,cluster_choice,config_choice,enhance],[model_message, sid])
+            with gr.Row():
+                with gr.Column():
+                    gr.Markdown(value="""
+                            模型加载大约需要10秒，后续操作不需要重新加载模型
+                            """)
+                    with gr.Row():
+                        choice_ckpt = gr.Dropdown(label="模型选择", choices=ckpt_list, value="未选择")
+                        config_choice = gr.Dropdown(label="配置文件", choices=os.listdir("configs"), value="未选择")
+                        cluster_choice = gr.Dropdown(label="选择聚类模型", choices=cluster_list, value="未选择")
+                    enhance = gr.Checkbox(label="NSF_HIFIGAN增强（对部分训练集少的模型有一定的音质增强效果，对训练好的模型有反面效果）", value=False)
+                    with gr.Row():
+                        refresh = gr.Button("刷新列表")
+                        loadckpt = gr.Button("加载模型", variant="primary")
+                    sid = gr.Radio(label="音色")
+                    refresh.click(load_options,[],[choice_ckpt,config_choice,cluster_choice])
+                    loadckpt.click(load_model_func,[choice_ckpt,cluster_choice,config_choice,enhance],[sid])
+                    choice_ckpt.change(choose_same_options,[choice_ckpt],[config_choice])
 
-            gr.Markdown(value="""
-                请稍等片刻，模型加载大约需要10秒。后续操作不需要重新加载模型
-                """)
-            
-            text2tts=gr.Textbox(label="在此输入要转译的文字。注意，使用该功能建议打开F0预测，不然会很怪")
-            tts_voice = gr.Radio(label="声线/语种",choices=["zh-CN-Yunxi","zh-CN-Xiaoyi","zh-CN-Xiaoxiao","zh-CN-Yunjian","zh-CN-Yunxia","zh-CN-Yunyang","zh-CN-liaoning-Xiaobei","zh-CN-shaanxi-Xiaoni","zh-HK-HiuGaai","zh-HK-HiuMaan","zh-HK-WanLung","zh-TW-HsiaoChen","zh-TW-HsiaoYu","zh-TW-YunJhe","ja-JP-Keita","ja-JP-Nanami","en-GB-Libby","en-GB-Maisie","en-GB-Ryan","en-GB-Sonia","en-GB-Thomas","en-US-Ana","en-US-Aria","en-US-Christopher","en-US-Eric","en-US-Guy","en-US-Jenny","en-US-Michelle","en-US-Roger","en-US-Steffan"], value="zh-CN-Yunxi")
-            tts_rate = gr.Number(label="tts语速", value=0)
-            vc_input3 = gr.Audio(label="上传音频")
-            vc_transform = gr.Number(label="变调（整数，可以正负，半音数量，升高八度就是12）", value=0)
-            cluster_ratio = gr.Number(label="聚类模型混合比例，0-1之间，默认为0不启用聚类，能提升音色相似度，但会导致咬字下降（如果使用建议0.5左右）", value=0)
-            auto_f0 = gr.Checkbox(label="自动f0预测，配合聚类模型f0预测效果更好,会导致变调功能失效（仅限转换语音，歌声不要勾选此项会究极跑调）", value=False)
-            F0_mean_pooling = gr.Checkbox(label="F0均值滤波(池化)，开启后可能有效改善哑音（对因和声混响造成的哑音无效）。", value=False)
-            enhancer_adaptive_key = gr.Number(label="使NSF-HIFIGAN增强器适应更高的音域(单位为半音数)|默认为0", value=0,interactive=True)
-            slice_db = gr.Number(label="切片阈值", value=-40)
-            noise_scale = gr.Number(label="noise_scale 建议不要动，会影响音质，玄学参数", value=0.4)
-            cl_num = gr.Number(label="音频自动切片，0为不切片，单位为秒/s", value=0)
-            pad_seconds = gr.Number(label="推理音频pad秒数，由于未知原因开头结尾会有异响，pad一小段静音段后就不会出现", value=0.5)
-            lg_num = gr.Number(label="两端音频切片的交叉淡入长度，如果自动切片后出现人声不连贯可调整该数值，如果连贯建议采用默认值0，注意，该设置会影响推理速度，单位为秒/s", value=0)
-            lgr_num = gr.Number(label="自动音频切片后，需要舍弃每段切片的头尾。该参数设置交叉长度保留的比例，范围0-1,左开右闭", value=0.75,interactive=True)
-            with gr.TabItem("转换"):
-                vc_submit = gr.Button("音频转换", variant="primary")
-                tts_submit = gr.Button("文字转换")
-                vc_output1 = gr.Textbox(label="Output Message")
-                vc_output2 = gr.Audio(label="Output Audio")
+                with gr.Column():
+                    with gr.TabItem("文字转换"):
+                        text2tts=gr.Textbox(label="在此输入要转译的文字。注意，使用该功能建议打开F0预测，不然会很怪")
+                        with gr.Row():
+                            tts_voice = gr.Dropdown(label="声线/语种",choices=["zh-CN-Yunxi","zh-CN-Xiaoyi","zh-CN-Xiaoxiao","zh-CN-Yunjian","zh-CN-Yunxia","zh-CN-Yunyang","zh-CN-liaoning-Xiaobei","zh-CN-shaanxi-Xiaoni","zh-HK-HiuGaai","zh-HK-HiuMaan","zh-HK-WanLung","zh-TW-HsiaoChen","zh-TW-HsiaoYu","zh-TW-YunJhe","ja-JP-Keita","ja-JP-Nanami","en-GB-Libby","en-GB-Maisie","en-GB-Ryan","en-GB-Sonia","en-GB-Thomas","en-US-Ana","en-US-Aria","en-US-Christopher","en-US-Eric","en-US-Guy","en-US-Jenny","en-US-Michelle","en-US-Roger","en-US-Steffan"], value="zh-CN-Yunxi")
+                            tts_rate = gr.Number(label="TTS语速", value=0)
+                        with gr.Row():
+                            tts_try = gr.Button("TTS试听")
+                            tts_submit = gr.Button("文字转换", variant="primary")
+                    with gr.TabItem("音频转换"):
+                        vc_input3 = gr.Audio(label="上传音频")
+                        vc_submit = gr.Button("音频转换", variant="primary")
+            with gr.Row():
+                with gr.Column():
+                    with gr.Accordion("效果设置"):
+                        with gr.Row():
+                            vc_transform = gr.Number(label="变调（整数，可以正负，半音数量，升高八度就是12）", value=0)
+                            cluster_ratio = gr.Number(label="聚类模型混合比例，0-1之间，默认为0不启用聚类，能提升音色相似度，但会导致咬字下降", value=0)
+                        auto_f0 = gr.Checkbox(label="自动f0预测，配合聚类模型f0预测效果更好，会导致变调功能失效（歌声勾选此项会跑调）", value=False)
+                        F0_mean_pooling = gr.Checkbox(label="F0均值滤波(池化)，开启后可能有效改善哑音（对因和声混响造成的哑音无效）。", value=False)
+
+                    with gr.Accordion("高级设置", open=False):
+                        enhancer_adaptive_key = gr.Number(label="使NSF-HIFIGAN增强器适应更高的音域(单位为半音数)|默认为0", value=0,interactive=True)
+                        slice_db = gr.Number(label="切片阈值", value=-40)
+                        noise_scale = gr.Number(label="noise_scale 建议不要动，会影响音质，玄学参数", value=0.4)
+                        cl_num = gr.Number(label="音频自动切片，0为不切片，单位为秒/s", value=0)
+                        pad_seconds = gr.Number(label="推理音频pad秒数，由于未知原因开头结尾会有异响，pad一小段静音段后就不会出现", value=0.5)
+                        lg_num = gr.Number(label="两端音频切片的交叉淡入长度，如果自动切片后出现人声不连贯可调整该数值，如果连贯建议采用默认值0，注意，该设置会影响推理速度，单位为秒/s", value=0)
+                        lgr_num = gr.Number(label="自动音频切片后，需要舍弃每段切片的头尾。该参数设置交叉长度保留的比例，范围0-1,左开右闭", value=0.75,interactive=True)
+                with gr.Column():
+                    vc_output2 = gr.Audio(label="生成音频")
+                    vc_output1 = gr.Textbox(label="生成信息")
 
         vc_submit.click(vc_fn, [sid, vc_input3, vc_transform,auto_f0,cluster_ratio, slice_db, noise_scale,pad_seconds,cl_num,lg_num,lgr_num,F0_mean_pooling,enhancer_adaptive_key], [vc_output1, vc_output2])
         tts_submit.click(vc_fn2, [sid, vc_input3, vc_transform,auto_f0,cluster_ratio, slice_db, noise_scale,pad_seconds,cl_num,lg_num,lgr_num,text2tts,tts_rate,tts_voice,F0_mean_pooling,enhancer_adaptive_key], [vc_output1, vc_output2])
+        tts_try.click(vc_fn_try, [text2tts,tts_rate,tts_voice], [vc_output1, vc_output2])
 
         with gr.TabItem("训练"):
             gr.Markdown(value="""请将数据集文件夹放置在dataset_raw文件夹下，确认放置正确后点击下方获取数据集名称""")
